@@ -3,8 +3,8 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
-from matplotlib import style
 from matplotlib.widgets import Button
+from datetime import datetime
 
 
 class Manager:
@@ -42,19 +42,29 @@ class Manager:
 
         self.FIG_INITIALIZED = True
 
-    def get_data(self):
+    def set_data(self, data):
+        # Assume data passed in is a dict of tuples of price, time
+        for entry in data:
+            price = entry.get('price')
+            time_at_price = entry.get('time')
+            utc_time = datetime.strptime(time_at_price, "%Y-%m-%dT%H:%M:%SZ")
+            epoch_time = (utc_time - datetime(1970, 1, 1)).total_seconds()
+            self.prices.append(float(price))
+            self.times.append(epoch_time)
+
+    def get_data(self, ticker):
         # Get the stock price
-        current_price = float(rh.get_crypto_price('LTC'))
+        current_price = float(rh.get_crypto_price(ticker))
 
         # print the stock value
         print("Current price: ", current_price)
+        print("Current time: ", time.time())
 
         self.prices.append(current_price)
         self.times.append(time.time())
         if len(self.prices) > self.MAX_SAMPLES:
             self.prices.pop(0)
             self.times.pop(0)
-            print("popping it")
 
         if len(self.prices) >= self.MAX_SAMPLES:
             self.data = {
@@ -118,8 +128,13 @@ def main():
     share_plot = []
     deriv_plot = []
 
+    ticker = 'ETH'  # Etherium
+    prev_data = rh.get_crypto_history(ticker, interval='5minute', span='day')
+
+    manager.set_data(prev_data)
+
     while True:
-        manager.get_data()
+        manager.get_data(ticker)
 
         share_plot = manager.live_plotter(manager.data['x'], manager.data['y'], share_plot, 'price')
         deriv_plot = manager.live_plotter(manager.data['x_p'], manager.data['y_p'], deriv_plot, 'deriv')
