@@ -22,14 +22,16 @@ class Manager:
         self.ani = None
         self.ax1 = None
         self.button = None
-        # self.engine = quant.DerivBasedQuantEngine()
-        self.engine = quant.TimeBasedQuantEngine()
+        self.engines = []
         self.plotting = True
+        self.continue_live = False  # Set to true for live graphs
 
         if self.plotting:
             self.fig = plt.figure(figsize=(13, 9))
 
-
+        # Add any quant engines you'd like to exercise here
+        self.engines.append(quant.TimeBasedQuantEngine())
+        self.engines.append(quant.DerivBasedQuantEngine())
 
     def initialize_plot(self):
         if self.FIG_INITIALIZED:
@@ -59,12 +61,12 @@ class Manager:
             epoch_time = (utc_time - datetime(1970, 1, 1)).total_seconds()
             self.prices.append(float(price))
             self.times.append(epoch_time)
-            self.engine.update_model(float(price), epoch_time)
-            if self.engine.should_buy():
-                self.engine.buy()
-
-            elif self.engine.should_sell():
-                self.engine.sell()
+            for engine in self.engines:
+                engine.update_model(float(price), epoch_time)
+                if engine.should_buy():
+                    engine.buy()
+                elif engine.should_sell():
+                    engine.sell()
 
     def get_current_data(self, ticker):
         # Get the stock price
@@ -76,7 +78,8 @@ class Manager:
 
         self.prices.append(current_price)
         self.times.append(time.time())
-        self.engine.update_model(current_price, time.time())
+        for engine in self.engines:
+            engine.update_model(current_price, time.time())
 
         if len(self.prices) > self.MAX_SAMPLES:
             self.prices.pop(0)
@@ -94,6 +97,14 @@ class Manager:
     def stop_pressed(mouse_event):
         print("Exiting")
         sys.exit(0)
+
+    @staticmethod
+    def convert_times_to_human_readable(epoch_times):
+        new_data = []
+        i = 0
+        for this_time in epoch_times:
+            new_data.append(time.strftime("%a, %d %b %Y %H:%M:%S %Z", time.localtime(this_time)))
+        return new_data
 
     def live_plotter(self, x_data, y_data, this_plot, plot, pause_time=0.1):
         if x_data != [] and len(x_data) >= self.MAX_SAMPLES - 1:
@@ -135,6 +146,10 @@ class Manager:
         # return line so we can update it again in the next iteration
         return this_plot
 
+    def close(self):
+        for engine in self.engines:
+            engine.close()
+
 
 def main():
     # Login
@@ -149,14 +164,18 @@ def main():
 
     manager.set_data(prev_data)
 
+    if not manager.continue_live:
+        manager.close()
+        exit(0)
+
     while True:
         manager.get_current_data(ticker)
 
-        if manager.engine.should_buy():
-            manager.engine.buy()
-
-        elif manager.engine.should_sell():
-            manager.engine.sell()
+        for engine in manager.engines:
+            if engine.should_buy():
+                engine.buy()
+            elif engine.should_sell():
+                engine.sell()
 
         if manager.plotting:
             share_plot = manager.live_plotter(manager.data['x'], manager.data['y'], share_plot, 'price')

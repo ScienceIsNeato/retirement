@@ -7,6 +7,7 @@ class QuantEngine:
     def __init__(self, allowance=100.00, is_mock=True):
         self.is_mock = is_mock
         self.funds_available = allowance
+        self.seed_money = allowance
         self.min_samples = 60  # minimum number of samples required to initiate trade
         self.min_time_since_last_trade = 1  # measured in minutes
         self.time_of_last_trade = time.time()
@@ -15,6 +16,11 @@ class QuantEngine:
         self.data = {'x': [], 'y': [], 'x_p': [], 'y_p': []}
         self.shares_owned = 0
         self.invested = False
+        self.emer_escape_threshold = .9  # default to sell as soon as there's loss
+        self.last_purchase_price = None  # Don't set until you buy
+        self.max_fund_value = allowance
+        self.min_fund_value = allowance
+        self.name = "Unnamed"
 
     def should_buy(self):
         # This needs to be overridden by child
@@ -30,6 +36,7 @@ class QuantEngine:
         shares = amount_to_buy_in_dollars/(self.prices[-1])
         self.update_shares_owned(shares)
         self.invested = True
+        self.last_purchase_price = self.prices[-1]
 
         print("Buying ", shares, " shares at ", self.prices[-1], " for $", amount_to_buy_in_dollars)
 
@@ -43,6 +50,11 @@ class QuantEngine:
         shares_sold = self.shares_owned
         self.update_shares_owned(self.shares_owned*-1)
         self.invested = False
+
+        if amount_to_sell_in_dollars > self.max_fund_value:
+            self.max_fund_value = amount_to_sell_in_dollars
+        if amount_to_sell_in_dollars < self.min_fund_value:
+            self.min_fund_value = amount_to_sell_in_dollars
 
         print("Sold ", shares_sold, " shares at ", self.prices[-1], " for $", amount_to_sell_in_dollars)
 
@@ -83,12 +95,35 @@ class QuantEngine:
     def update_model(self, price, time_of_price):
         raise Exception("not implemented")
 
+    def set_emer_escape_threshold(self, thresh):
+        self.emer_escape_threshold = thresh
+
+    def emergency_escape_bail(self, current_price):
+        if not self.last_purchase_price:
+            print("ERROR: last purchase price not initialized")
+            return False
+        if current_price <= self.last_purchase_price * self.emer_escape_threshold:
+            return True
+        return False
+
+    def close(self):
+        self.sell()
+        self.exit_report()
+
+    def exit_report(self):
+        print("Engine (", self.name, ") "
+              " Start: ",  self.seed_money,
+              " End: ", self.funds_available,
+              " Min: ", self.min_fund_value,
+              " Max: ", self.max_fund_value)
+
 
 class DerivBasedQuantEngine(QuantEngine):
     def __init__(self):
         super().__init__()
         self.buy_threshold = 0.01  # No idea if this is right or not
         self.sell_threshold = 0  # No idea if this is right or not
+        self.name = 'DerivBasedQuantEngine'
 
     def should_buy(self):
         if len(self.data['y_p']) < 1:
@@ -144,6 +179,10 @@ class DerivBasedQuantEngine(QuantEngine):
 
 
 class TimeBasedQuantEngine(QuantEngine):
+    def __init__(self):
+        super().__init__()
+        self.name = 'TimeBasedQuantEngine'
+
     def markets_just_closed(self):
         return self.is_time_in_window(dt.time(16, 00),
                                       dt.time(16, 30),
@@ -191,11 +230,15 @@ class TimeBasedQuantEngine(QuantEngine):
 
         trade_err_msg = self.can_trade()
 
-        if self.markets_just_opened():
+        if self.emergency_escape_bail(self.prices[-1]):
+            print("Initiating sale for emergency escape")
+            return True
+        elif self.markets_just_opened():
             if trade_err_msg != "":
                 print("Want to sell, but can't because: ", trade_err_msg)
                 return False
             else:
+                print("Initiating sale for market open")
                 return True
 
         return False
