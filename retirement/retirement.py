@@ -24,7 +24,8 @@ class Manager:
         self.button = None
         self.engines = []
         self.plotting = True
-        self.continue_live = False  # Set to true for live graphs
+        self.continue_live = True  # Set to true for live graphs
+        self.stop = False
 
         if self.plotting:
             self.fig = plt.figure(figsize=(13, 9))
@@ -32,6 +33,7 @@ class Manager:
         # Add any quant engines you'd like to exercise here
         self.engines.append(quant.TimeBasedQuantEngine())
         self.engines.append(quant.DerivBasedQuantEngine())
+        self.engines.append(quant.BaselineQuantEngine())
 
     def initialize_plot(self):
         if self.FIG_INITIALIZED:
@@ -93,10 +95,9 @@ class Manager:
             self.data['y_p'] = list(np.diff(self.data['y']) / np.diff(self.data['x']))
             self.data['x_p'] = list((np.array(self.data['x'])[:-1] + np.array(self.data['x'])[1:]) / 2)
 
-    @staticmethod
-    def stop_pressed(mouse_event):
-        print("Exiting")
-        sys.exit(0)
+    def stop_pressed(self, _):
+        self.stop = True
+        print("User stopped execution")
 
     @staticmethod
     def convert_times_to_human_readable(epoch_times):
@@ -150,6 +151,34 @@ class Manager:
         for engine in self.engines:
             engine.close()
 
+        if self.plotting:
+            print("Clearing current plot...")
+            plt.close()
+            self.fig = plt.figure(figsize=(13, 9))
+        else:
+            exit(0)
+
+        # Maybe graph on way out
+        for engine in self.engines:
+            x_vals = []
+            y_vals = []
+            for event in engine.event_points:
+                x_vals.append(event.time_of_event)
+                y_vals.append(event.price)
+            legend_val = engine.name
+            plt.plot(x_vals, y_vals, label=legend_val)
+
+        # Normalize the stock for comparison
+        normalized_prices = []
+        initial_stock_val = self.prices[0]
+        initial_value = self.engines[0].event_points[0].price
+
+        for price in self.prices:
+            normalized_prices.append(price*(initial_value/initial_stock_val))
+        plt.plot(self.times, normalized_prices, label="Normalized stock price for comparison")
+        plt.legend()
+        plt.show(block=True)
+
 
 def main():
     # Login
@@ -168,7 +197,7 @@ def main():
         manager.close()
         exit(0)
 
-    while True:
+    while not manager.stop:
         manager.get_current_data(ticker)
 
         for engine in manager.engines:
@@ -182,6 +211,8 @@ def main():
             deriv_plot = manager.live_plotter(manager.data['x_p'], manager.data['y_p'], deriv_plot, 'deriv')
 
         time.sleep(manager.UPDATE_INTERVAL)
+
+    manager.close()
 
 
 if __name__ == "__main__":

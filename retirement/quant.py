@@ -3,6 +3,12 @@ import numpy as np
 import datetime as dt
 
 
+class EventPoint:
+    def __init__(self, price, time_of_event, is_sale=False):
+        self.price = price
+        self.time_of_event = time_of_event
+        self.is_sale = is_sale
+
 class QuantEngine:
     def __init__(self, allowance=100.00, is_mock=True):
         self.is_mock = is_mock
@@ -20,6 +26,7 @@ class QuantEngine:
         self.last_purchase_price = None  # Don't set until you buy
         self.max_fund_value = allowance
         self.min_fund_value = allowance
+        self.event_points = []
         self.name = "Unnamed"
 
     def should_buy(self):
@@ -40,6 +47,11 @@ class QuantEngine:
 
         print("Buying ", shares, " shares at ", self.prices[-1], " for $", amount_to_buy_in_dollars)
 
+        event = EventPoint(price=amount_to_buy_in_dollars,
+                           time_of_event=self.times[-1],
+                           is_sale=False)
+        self.event_points.append(event)
+
     def sell(self):
         if not self.invested:
             print("ERROR: trying to sell when you ain't got none")
@@ -57,6 +69,11 @@ class QuantEngine:
             self.min_fund_value = amount_to_sell_in_dollars
 
         print("Sold ", shares_sold, " shares at ", self.prices[-1], " for $", amount_to_sell_in_dollars)
+
+        event = EventPoint(price=amount_to_sell_in_dollars,
+                           time_of_event=self.times[-1],
+                           is_sale=True)
+        self.event_points.append(event)
 
     def should_sell(self):
         # This needs to be overridden by child
@@ -105,6 +122,26 @@ class QuantEngine:
         if current_price <= self.last_purchase_price * self.emer_escape_threshold:
             return True
         return False
+
+    @staticmethod
+    def is_time_in_window(start_time, end_time, now_time):
+        now_time = time.strftime('%H:%M:%S', time.localtime(now_time))
+        datetime_object = dt.time.fromisoformat(now_time)
+        if start_time < end_time:
+            return start_time <= datetime_object <= end_time
+        else:
+            # Over midnight:
+            return now_time >= start_time or now_time <= end_time
+
+    def markets_just_closed(self):
+        return self.is_time_in_window(dt.time(16, 00),
+                                      dt.time(16, 30),
+                                      self.times[-1])
+
+    def markets_just_opened(self):
+        return self.is_time_in_window(dt.time(8, 00),
+                                      dt.time(8, 30),
+                                      self.times[-1])
 
     def close(self):
         self.sell()
@@ -183,26 +220,6 @@ class TimeBasedQuantEngine(QuantEngine):
         super().__init__()
         self.name = 'TimeBasedQuantEngine'
 
-    def markets_just_closed(self):
-        return self.is_time_in_window(dt.time(16, 00),
-                                      dt.time(16, 30),
-                                      self.times[-1])
-
-    def markets_just_opened(self):
-        return self.is_time_in_window(dt.time(8, 00),
-                                      dt.time(8, 30),
-                                      self.times[-1])
-
-    @staticmethod
-    def is_time_in_window(start_time, end_time, now_time):
-        now_time = time.strftime('%H:%M:%S', time.localtime(now_time))
-        datetime_object = dt.time.fromisoformat(now_time)
-        if start_time < end_time:
-            return start_time <= datetime_object <= end_time
-        else:
-            # Over midnight:
-            return now_time >= start_time or now_time <= end_time
-
     def should_buy(self):
         if len(self.data['y_p']) < 1:
             return False
@@ -258,3 +275,28 @@ class TimeBasedQuantEngine(QuantEngine):
             }
             self.data['y_p'] = list(np.diff(self.data['y']) / np.diff(self.data['x']))
             self.data['x_p'] = list((np.array(self.data['x'])[:-1] + np.array(self.data['x'])[1:]) / 2)
+
+
+class BaselineQuantEngine(QuantEngine):
+    def __init__(self):
+        super().__init__()
+        self.name = 'BaselineQuantEngine'
+
+    def should_buy(self):
+        # Buy immediately
+        if self.invested:
+            return False  # already bought
+
+        return True
+
+    def should_sell(self):
+        # Never sell
+        return False
+
+    def update_model(self, price, time_of_price):
+        if len(self.times) == 0:
+            # First data entry. Set as time of first trade
+            self.time_of_last_trade = time_of_price
+
+        self.prices.append(price)
+        self.times.append(time_of_price)
