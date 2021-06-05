@@ -155,12 +155,13 @@ class QuantEngine:
               " Max: ", self.max_fund_value)
 
 
-class DerivBasedQuantEngine(QuantEngine):
-    def __init__(self):
+class IthDerivBasedQuantEngine(QuantEngine):
+    def __init__(self, deriv_dim=1):
         super().__init__()
         self.buy_threshold = 0.01  # No idea if this is right or not
         self.sell_threshold = 0  # No idea if this is right or not
-        self.name = 'DerivBasedQuantEngine'
+        self.deriv_dim = deriv_dim
+        self.name = str(self.deriv_dim) + 'thDerivBasedQuantEngine'
 
     def should_buy(self):
         if len(self.data['y_p']) < 1:
@@ -211,8 +212,13 @@ class DerivBasedQuantEngine(QuantEngine):
                 'x': self.times,
                 'y': self.prices
             }
-            self.data['y_p'] = list(np.diff(self.data['y']) / np.diff(self.data['x']))
-            self.data['x_p'] = list((np.array(self.data['x'])[:-1] + np.array(self.data['x'])[1:]) / 2)
+            # self.data['y_p'] = list(np.diff(self.data['y']) / np.diff(self.data['x']))
+            # self.data['x_p'] = list((np.array(self.data['x'])[:-1] + np.array(self.data['x'])[1:]) / 2)
+
+            self.data['y_p'] = list(np.diff(self.data['y'], self.deriv_dim))
+
+            # Need to normalize derivative with respect to time units
+            self.data['x_p'] = self.times[:-self.deriv_dim]
 
 
 class TimeBasedQuantEngine(QuantEngine):

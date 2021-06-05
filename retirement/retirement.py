@@ -26,14 +26,18 @@ class Manager:
         self.plotting = True
         self.continue_live = True  # Set to true for live graphs
         self.stop = False
+        self.ticker = 'DOGE'
 
         if self.plotting:
             self.fig = plt.figure(figsize=(13, 9))
 
         # Add any quant engines you'd like to exercise here
         self.engines.append(quant.TimeBasedQuantEngine())
-        self.engines.append(quant.DerivBasedQuantEngine())
         self.engines.append(quant.BaselineQuantEngine())
+        self.engines.append(quant.IthDerivBasedQuantEngine())
+        self.engines.append(quant.IthDerivBasedQuantEngine(2))
+        self.engines.append(quant.IthDerivBasedQuantEngine(3))
+        self.engines.append(quant.IthDerivBasedQuantEngine(4))
 
     def initialize_plot(self):
         if self.FIG_INITIALIZED:
@@ -45,7 +49,7 @@ class Manager:
         # Create and label top graph (stock price)
         plt.subplot(211)
         plt.ylabel('Share Price')
-        plt.title('Etherium Share Price Over Time: {}'.format(''))
+        plt.title(self.ticker+' Share Price Over Time: {}'.format(''))
 
         # Create and label bottom graph (rate of change)
         plt.subplot(212)
@@ -92,8 +96,10 @@ class Manager:
                 'x': self.times,
                 'y': self.prices
             }
-            self.data['y_p'] = list(np.diff(self.data['y']) / np.diff(self.data['x']))
-            self.data['x_p'] = list((np.array(self.data['x'])[:-1] + np.array(self.data['x'])[1:]) / 2)
+            self.data['y_p'] = list(np.diff(self.data['y'], 4))
+
+            # Need to normalize derivative with respect to time units
+            self.data['x_p'] = self.times[:-4]
 
     def stop_pressed(self, _):
         self.stop = True
@@ -158,7 +164,9 @@ class Manager:
         else:
             exit(0)
 
-        # Maybe graph on way out
+        # First sort engines based on final performance
+        self.engines.sort(key=lambda x: x.event_points[-1].price, reverse=True)
+
         for engine in self.engines:
             x_vals = []
             y_vals = []
@@ -166,6 +174,9 @@ class Manager:
                 x_vals.append(event.time_of_event)
                 y_vals.append(event.price)
             legend_val = engine.name
+            # Append % difference to legend name
+            percent_diff = "%.2f" % ((y_vals[-1]-y_vals[0])/y_vals[0]*100)
+            legend_val = legend_val + " (" + percent_diff + ")"
             plt.plot(x_vals, y_vals, label=legend_val)
 
         # Normalize the stock for comparison
@@ -175,8 +186,12 @@ class Manager:
 
         for price in self.prices:
             normalized_prices.append(price*(initial_value/initial_stock_val))
-        plt.plot(self.times, normalized_prices, label="Normalized stock price for comparison")
+        # Append % difference to legend name
+        percent_diff = "%.2f" % ((self.prices[-1] - self.prices[0]) / self.prices[0] * 100)
+        legend_val = "Normalized price for comp" + " (" + percent_diff + ")"
+        plt.plot(self.times, normalized_prices, label=legend_val)
         plt.legend()
+        plt.title('Quant Engines over time for '+self.ticker+': {}'.format(''))
         plt.show(block=True)
 
 
@@ -188,8 +203,7 @@ def main():
     share_plot = []
     deriv_plot = []
 
-    ticker = 'ETH'  # Etherium
-    prev_data = rh.get_crypto_history(ticker, interval='hour', span='month')
+    prev_data = rh.get_crypto_history(manager.ticker, interval='hour', span='month')
 
     manager.set_data(prev_data)
 
@@ -198,7 +212,7 @@ def main():
         exit(0)
 
     while not manager.stop:
-        manager.get_current_data(ticker)
+        manager.get_current_data(manager.ticker)
 
         for engine in manager.engines:
             if engine.should_buy():
