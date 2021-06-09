@@ -3,7 +3,8 @@ import quant
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-import sys
+import matplotlib.ticker as mtick
+
 from matplotlib.widgets import Button
 from datetime import datetime
 
@@ -127,6 +128,12 @@ class Manager:
                 else:
                     this_plot, = axis.plot(x_data, y_data, '-o', alpha=0.8)
 
+                # This works to get an axis labelled initially, but doesn't update over time
+                plt.gcf().autofmt_xdate()
+                plt.gca().xaxis.set_major_locator(plt.MaxNLocator(15))
+                plt.gca().xaxis.set_major_formatter(
+                    mtick.FuncFormatter(lambda pos, _: time.strftime("%m/%d/%Y %H:%M:%S", time.localtime(pos)))
+                )
                 return this_plot
 
             self.initialize_plot()
@@ -192,6 +199,14 @@ class Manager:
         plt.plot(self.times, normalized_prices, label=legend_val)
         plt.legend()
         plt.title('Quant Engines over time for '+self.ticker+': {}'.format(''))
+
+        # These lines make it so that the x-axis have human readable labels
+        plt.gcf().autofmt_xdate()
+        plt.gca().xaxis.set_major_locator(plt.MaxNLocator(15))
+        plt.gca().xaxis.set_major_formatter(
+            mtick.FuncFormatter(lambda pos, _: time.strftime("%m/%d/%Y %H:%M:%S", time.localtime(pos)))
+        )
+
         plt.show(block=True)
 
 
