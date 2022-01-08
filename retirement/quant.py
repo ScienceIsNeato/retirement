@@ -156,12 +156,12 @@ class QuantEngine:
 
 
 class IthDerivBasedQuantEngine(QuantEngine):
-    def __init__(self, deriv_dim=1):
+    def __init__(self, deriv_dim=1, buy_threshold=0.01, sell_threshold=0):
         super().__init__()
-        self.buy_threshold = 0.01  # No idea if this is right or not
-        self.sell_threshold = 0  # No idea if this is right or not
         self.deriv_dim = deriv_dim
-        self.name = str(self.deriv_dim) + 'thDerivBasedQuantEngine'
+        self.buy_threshold = buy_threshold  # No idea if this is right or not
+        self.sell_threshold = sell_threshold  # No idea if this is right or not
+        self.name = str(self.deriv_dim) + 'thDeriv_buy:' + "%.2f" % buy_threshold + ',sell:' + "%.2f" % sell_threshold
 
     def should_buy(self):
         if len(self.data['y_p']) < 1:

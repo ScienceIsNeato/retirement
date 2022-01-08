@@ -25,7 +25,7 @@ class Manager:
         self.button = None
         self.engines = []
         self.plotting = True
-        self.continue_live = True  # Set to true for live graphs
+        self.continue_live = False  # Set to true for live graphs
         self.stop = False
         self.ticker = 'DOGE'
 
@@ -36,9 +36,19 @@ class Manager:
         self.engines.append(quant.TimeBasedQuantEngine())
         self.engines.append(quant.BaselineQuantEngine())
         self.engines.append(quant.IthDerivBasedQuantEngine())
-        self.engines.append(quant.IthDerivBasedQuantEngine(2))
-        self.engines.append(quant.IthDerivBasedQuantEngine(3))
-        self.engines.append(quant.IthDerivBasedQuantEngine(4))
+
+        # Set up a whole bunch of these dudes to compare
+        num_steps_buy = 5
+        num_steps_sell = 5
+        buy_start = -.1
+        buy_end = .1
+        sell_start = -.1
+        sell_end = .1
+        for buy_thresh in np.arange(buy_start, buy_end, (buy_end - buy_start)/num_steps_buy):
+            for sell_thresh in np.arange(sell_start, sell_end, (sell_end - sell_start)/num_steps_sell):
+                self.engines.append(quant.IthDerivBasedQuantEngine(deriv_dim=4,
+                                                                   buy_threshold=buy_thresh,
+                                                                   sell_threshold=sell_thresh))
 
     def initialize_plot(self):
         if self.FIG_INITIALIZED:
@@ -171,7 +181,13 @@ class Manager:
         else:
             exit(0)
 
-        # First sort engines based on final performance
+        # First sort engines based on final performance or remove if no data
+        tmp_engines = []
+        for engine in self.engines:
+            if len(engine.event_points) > 1:
+                tmp_engines.append(engine)
+        self.engines = tmp_engines
+
         self.engines.sort(key=lambda x: x.event_points[-1].price, reverse=True)
 
         for engine in self.engines:
@@ -218,7 +234,7 @@ def main():
     share_plot = []
     deriv_plot = []
 
-    prev_data = rh.get_crypto_history(manager.ticker, interval='hour', span='month')
+    prev_data = rh.get_crypto_history(manager.ticker, interval='hour', span='3month')
 
     manager.set_data(prev_data)
 

@@ -1,4 +1,6 @@
 import robin_stocks.robinhood as rs
+from pyotp import TOTP as otp
+from os.path import expanduser
 import os
 
 robin_user = os.environ.get("RH_USR")
@@ -6,12 +8,31 @@ robin_pass = os.environ.get("RH_PWD")
 
 
 def rh_login():
+    clear_pickles()
     print("Logging in to RobinHood...")
-    rs.login(username=robin_user,
-             password=robin_pass,
-             expiresIn=86400,
-             by_sms=True)
+
+    # For this you'll need to set up MFA in robinhood
+    totp = otp(os.environ.get('RH_TOKEN')).now()
+
+    if totp is None:
+        print('RH_TOKEN is missing from your env. Go set up MFA in robinhoods webpage,'
+              'copy the token (by clicking \"can\'t scan\") and try again!')
+        exit(0)
+
+    rs.authentication.login(
+        username=os.environ.get('RH_USR'),
+        password=os.environ.get('RH_PWD'),
+        mfa_code=totp
+    )
     print("Login Successful")
+
+
+def clear_pickles():
+    print("Clearing any lingering pickels from previous logins...")
+    home = expanduser("~")
+    full_path = home + '/.tokens/robinhood.pickle'
+    if os.path.exists(full_path):
+        os.remove(full_path)
 
 
 def rh_execute_trade(ticker):
